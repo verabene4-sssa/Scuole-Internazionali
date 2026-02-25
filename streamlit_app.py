@@ -58,12 +58,14 @@ df_students["Studenti totali"] = df_students[classes].sum(axis=1)
 
 
 # ============================= TABS ============================= #
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "Ricavi preventivi",
     "Costi preventivi del personale", 
     "Costi preventivi di struttura", 
     "Conto economico",
-    "Indici di valutazione",
+    "Stato patrimoniale",
+    "Rendiconto finanziario",
+    "Indici di valutazione"
 ])
 
 
@@ -509,7 +511,7 @@ with tab3:
 
 
 # ================= TAB 4: INDICI DI VALUTAZIONE ================= #
-with tab5:
+with tab7:
     st.subheader("Indici di valutazione")
 
     # --- Calcolo break-even (primo anno con ricavi >= costi totali) ---
@@ -792,3 +794,429 @@ with tab4:
 
 
 
+##############################################
+#              STATO PATRIMONIALE           #
+##############################################
+
+with tab5:
+
+    st.subheader("Stato Patrimoniale previsionale")
+
+    anni = years
+
+    # -------------------------------
+    # FONDO DI DOTAZIONE PROGRESSIVO
+    # -------------------------------
+    fondo_progressivo = [200000, 120000, 90000, 60000, 30000]
+    fondo_cumulato = np.cumsum(fondo_progressivo)
+
+    risultati = df_summary["Risultato netto (€)"].values
+
+    # Perdite / utili cumulati
+    cumulato = []
+    somma = 0
+    for r in risultati:
+        somma += r
+        cumulato.append(somma)
+
+    # -------------------------------
+    # COSTRUZIONE VALORI PER ANNO
+    # -------------------------------
+
+    sp = {}
+
+    for i, anno in enumerate(anni):
+
+        # ATTIVO
+        imm_immateriali = max(30000 - i*5000, 10000)
+        imm_materiali = df_costs.at[i, "Ammortamenti arredi (€/anno)"] * 5
+        imm_fin = 10000
+
+        tot_imm = imm_immateriali + imm_materiali + imm_fin
+
+        rimanenze = 2000 + i*1000
+        crediti = df_summary.at[i, "Ricavi (€)"] * 0.2
+        att_fin_non_imm = 0
+
+        liquidita = fondo_cumulato[i] + cumulato[i] - tot_imm - rimanenze - crediti
+
+        tot_circ = rimanenze + crediti + att_fin_non_imm + liquidita
+        totale_attivo = tot_imm + tot_circ
+
+        # PASSIVO
+        fondo = fondo_cumulato[i]
+        risultato_es = risultati[i]
+        utili_portati = cumulato[i] - risultato_es
+
+        patrimonio_netto = fondo + utili_portati + risultato_es
+
+        fondi_rischi = 5000 + i*1000
+        tfr = df_personale.at[i, "Totale costi personale (€)"] * 0.07
+
+        debiti = totale_attivo - patrimonio_netto - fondi_rischi - tfr
+
+        sp[anno] = {
+            # ATTIVO
+            "imm_immateriali": imm_immateriali,
+            "imm_materiali": imm_materiali,
+            "imm_fin": imm_fin,
+            "tot_imm": tot_imm,
+            "rimanenze": rimanenze,
+            "crediti": crediti,
+            "att_fin_non_imm": att_fin_non_imm,
+            "liquidita": liquidita,
+            "tot_circ": tot_circ,
+            "tot_attivo": totale_attivo,
+            # PASSIVO
+            "fondo": fondo,
+            "fin_invest": 0,
+            "riserve_vinc": 0,
+            "altre_riserve": 0,
+            "contrib_rip": 0,
+            "utili_portati": utili_portati,
+            "risultato_es": risultato_es,
+            "tot_pn": patrimonio_netto,
+            "fondi_rischi": fondi_rischi,
+            "tfr": tfr,
+            "debiti": debiti
+        }
+
+    # -------------------------------
+    # FUNZIONE FORMATTA EURO
+    # -------------------------------
+    def euro(x):
+        if x < 0:
+            return f"-€ {abs(x):,.0f}".replace(",", ".")
+        return f"€ {x:,.0f}".replace(",", ".")
+
+    # -------------------------------
+    # COSTRUZIONE HTML
+    # -------------------------------
+
+    def header():
+        h = "<tr><th>VOCI</th>"
+        for a in anni:
+            h += f"<th>ANNO {a}</th>"
+        h += "</tr>"
+        return h
+
+    def riga(label, key, bold=False):
+        if bold:
+            label = f"<b>{label}</b>"
+        row = f"<tr><td>{label}</td>"
+        for a in anni:
+            row += f"<td style='text-align:right'>{euro(sp[a][key])}</td>"
+        row += "</tr>"
+        return row
+
+    html = f"""
+    <style>
+    table.sp {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        margin-bottom: 40px;
+    }}
+    table.sp th {{
+        background-color: #e1e8f7;
+        padding: 6px;
+        text-align: center;
+    }}
+    table.sp td {{
+        padding: 6px;
+        border-bottom: 1px solid #ddd;
+    }}
+    .section {{
+        background-color: #f2f5fc;
+        font-weight: bold;
+    }}
+    </style>
+
+    <h3>STATO PATRIMONIALE ATTIVO</h3>
+    <table class="sp">
+    {header()}
+    <tr class="section"><td colspan="{1+len(anni)}">A) IMMOBILIZZAZIONI</td></tr>
+    {riga("I Immobilizzazioni immateriali", "imm_immateriali")}
+    {riga("II Immobilizzazioni materiali", "imm_materiali")}
+    {riga("III Immobilizzazioni finanziarie", "imm_fin")}
+    {riga("Totale A) Immobilizzazioni", "tot_imm", True)}
+
+    <tr class="section"><td colspan="{1+len(anni)}">B) ATTIVO CIRCOLANTE</td></tr>
+    {riga("I Rimanenze", "rimanenze")}
+    {riga("II Crediti", "crediti")}
+    {riga("III Attività finanziarie non immobilizzate", "att_fin_non_imm")}
+    {riga("IV Disponibilità liquide", "liquidita")}
+    {riga("Totale B) Attivo circolante", "tot_circ", True)}
+
+    {riga("TOTALE ATTIVO (A+B)", "tot_attivo", True)}
+    </table>
+
+    <h3>STATO PATRIMONIALE PASSIVO</h3>
+    <table class="sp">
+    {header()}
+    <tr class="section"><td colspan="{1+len(anni)}">A) PATRIMONIO NETTO</td></tr>
+    {riga("I Fondo di dotazione", "fondo")}
+    {riga("II Finanziamenti per investimenti", "fin_invest")}
+    {riga("III Riserve vincolate", "riserve_vinc")}
+    {riga("IV Altre riserve", "altre_riserve")}
+    {riga("V Contributi ripiano perdite", "contrib_rip")}
+    {riga("VI Utili (perdite) portati a nuovo", "utili_portati")}
+    {riga("VII Risultato esercizio", "risultato_es")}
+    {riga("Totale A) Patrimonio netto", "tot_pn", True)}
+
+    {riga("B) FONDI PER RISCHI E ONERI", "fondi_rischi")}
+    {riga("C) TRATTAMENTO FINE RAPPORTO", "tfr")}
+    {riga("D) DEBITI", "debiti")}
+
+    {riga("TOTALE PASSIVO", "tot_attivo", True)}
+    </table>
+    """
+
+    components.html(html, height=1200, scrolling=True)
+
+
+
+
+#------------------------------------------#
+####------RENDICONTO FINANZIARIO
+#------------------------------------------#
+
+
+with tab6:
+
+    st.subheader("Rendiconto Finanziario")
+
+    anni = years
+    fondo_progressivo = [200000, 120000, 90000, 60000, 30000]
+
+    risultati = df_summary["Risultato netto (€)"].values
+
+    rf = {}
+    liquidita_precedente = 0
+
+    for i, anno in enumerate(anni):
+
+        # ===============================
+        # 1) GESTIONE CARATTERISTICA
+        # ===============================
+
+        risultato_operativo = risultati[i]
+
+        ammortamenti = (
+            df_costs.at[i, "Ammortamenti arredi (€/anno)"] +
+            df_costs.at[i, "Ammort. attrezzature (€/anno)"]
+        )
+
+        flusso_gestione_caratt = risultato_operativo + ammortamenti
+
+        # ===============================
+        # 2) GESTIONI NON OPERATIVE
+        # ===============================
+
+        gestione_finanziaria = 0
+        gestione_straordinaria = 0
+        gestione_fiscale = 0
+
+        flusso_potenziale_ccn = (
+            flusso_gestione_caratt +
+            gestione_finanziaria +
+            gestione_straordinaria +
+            gestione_fiscale
+        )
+
+        # ===============================
+        # 3) VARIAZIONI CCN
+        # ===============================
+
+        rimanenze = 2000 + i * 1000
+        crediti = df_summary.at[i, "Ricavi (€)"] * 0.2
+
+        if i == 0:
+            var_rimanenze = -rimanenze
+            var_crediti = -crediti
+        else:
+            rimanenze_prev = 2000 + (i - 1) * 1000
+            crediti_prev = df_summary.at[i - 1, "Ricavi (€)"] * 0.2
+
+            var_rimanenze = -(rimanenze - rimanenze_prev)
+            var_crediti = -(crediti - crediti_prev)
+
+        var_altri_crediti = 0
+        var_att_fin = 0
+        var_ratei_att = 0
+
+        var_debiti_commerciali = 0
+        var_debiti_diversi = 0
+        var_ratei_passivi = 0
+
+        flusso_gestione_reddituale = (
+            flusso_potenziale_ccn +
+            var_rimanenze +
+            var_crediti +
+            var_altri_crediti +
+            var_att_fin +
+            var_ratei_att +
+            var_debiti_commerciali +
+            var_debiti_diversi +
+            var_ratei_passivi
+        )
+
+        # ===============================
+        # 4) INVESTIMENTI
+        # ===============================
+
+        var_imm_immateriali = -5000 if i > 0 else -30000
+        var_imm_materiali = -df_costs.at[i, "Ammortamenti arredi (€/anno)"] * 5
+        var_imm_finanziarie = 0
+
+        flusso_investimenti = (
+            var_imm_immateriali +
+            var_imm_materiali +
+            var_imm_finanziarie
+        )
+
+        # ===============================
+        # 5) FINANZIAMENTI
+        # ===============================
+
+        var_debiti_fin = 0
+
+        tfr = df_personale.at[i, "Totale costi personale (€)"] * 0.07
+        if i == 0:
+            var_tfr = tfr
+        else:
+            tfr_prev = df_personale.at[i - 1, "Totale costi personale (€)"] * 0.07
+            var_tfr = tfr - tfr_prev
+
+        var_debiti_lp = 0
+        var_debiti_div = 0
+        var_fondo_rischi = 1000
+        var_patrimonio_netto = fondo_progressivo[i]
+
+        flusso_finanziamenti = (
+            var_debiti_fin +
+            var_tfr +
+            var_debiti_lp +
+            var_debiti_div +
+            var_fondo_rischi +
+            var_patrimonio_netto
+        )
+
+        # ===============================
+        # 6) FLUSSO NETTO
+        # ===============================
+
+        flusso_netto = (
+            flusso_gestione_reddituale +
+            flusso_investimenti +
+            flusso_finanziamenti
+        )
+
+        liquidita_finale = liquidita_precedente + flusso_netto
+
+        rf[anno] = {
+            "risultato_operativo": risultato_operativo,
+            "ammortamenti": ammortamenti,
+            "flusso_gestione_caratt": flusso_gestione_caratt,
+            "gestione_fin": gestione_finanziaria,
+            "gestione_str": gestione_straordinaria,
+            "gestione_fisc": gestione_fiscale,
+            "flusso_pot_ccn": flusso_potenziale_ccn,
+            "var_rimanenze": var_rimanenze,
+            "var_crediti": var_crediti,
+            "flusso_gestione_redd": flusso_gestione_reddituale,
+            "var_imm_imm": var_imm_immateriali,
+            "var_imm_mat": var_imm_materiali,
+            "var_imm_fin": var_imm_finanziarie,
+            "var_tfr": var_tfr,
+            "var_pn": var_patrimonio_netto,
+            "flusso_netto": flusso_netto,
+            "liq_inizio": liquidita_precedente,
+            "liq_fine": liquidita_finale
+        }
+
+        liquidita_precedente = liquidita_finale
+
+    # ===============================
+    # FUNZIONE EURO
+    # ===============================
+
+    def euro(x):
+        if x < 0:
+            return f"-€ {abs(x):,.0f}".replace(",", ".")
+        return f"€ {x:,.0f}".replace(",", ".")
+
+    # ===============================
+    # COSTRUZIONE TABELLA HTML
+    # ===============================
+
+    def header():
+        h = "<tr><th>VOCI</th>"
+        for a in anni:
+            h += f"<th>ANNO {a}</th>"
+        h += "</tr>"
+        return h
+
+    def riga(label, key, bold=False):
+        if bold:
+            label = f"<b>{label}</b>"
+        row = f"<tr><td>{label}</td>"
+        for a in anni:
+            row += f"<td style='text-align:right'>{euro(rf[a][key])}</td>"
+        row += "</tr>"
+        return row
+
+    html = f"""
+    <style>
+    table.rf {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }}
+    table.rf th {{
+        background-color: #e1e8f7;
+        padding: 6px;
+        text-align: center;
+    }}
+    table.rf td {{
+        padding: 6px;
+        border-bottom: 1px solid #ddd;
+    }}
+    .section {{
+        background-color: #f2f5fc;
+        font-weight: bold;
+    }}
+    </style>
+
+    <table class="rf">
+    {header()}
+
+    <tr class="section"><td colspan="{1+len(anni)}">GESTIONE CARATTERISTICA</td></tr>
+    {riga("Risultato operativo", "risultato_operativo")}
+    {riga("Ammortamenti e accantonamenti", "ammortamenti")}
+    {riga("FLUSSO DI CASSA DELLA GESTIONE CARATTERISTICA", "flusso_gestione_caratt", True)}
+
+    <tr class="section"><td colspan="{1+len(anni)}">GESTIONE REDDITUALE</td></tr>
+    {riga("FLUSSO POTENZIALE DI CCN", "flusso_pot_ccn", True)}
+    {riga("Variazione Rimanenze", "var_rimanenze")}
+    {riga("Variazione Crediti commerciali", "var_crediti")}
+    {riga("FLUSSO DI CASSA DELLA GESTIONE REDDITUALE", "flusso_gestione_redd", True)}
+
+    <tr class="section"><td colspan="{1+len(anni)}">INVESTIMENTI</td></tr>
+    {riga("Variazione Immobilizzazioni immateriali", "var_imm_imm")}
+    {riga("Variazione Immobilizzazioni materiali", "var_imm_mat")}
+    {riga("Variazione Immobilizzazioni finanziarie", "var_imm_fin")}
+
+    <tr class="section"><td colspan="{1+len(anni)}">FINANZIAMENTI</td></tr>
+    {riga("Variazione Fondo TFR", "var_tfr")}
+    {riga("Variazione Patrimonio Netto", "var_pn")}
+
+    <tr class="section"><td colspan="{1+len(anni)}">SINTESI</td></tr>
+    {riga("FLUSSO DI CASSA NETTO AZIENDALE", "flusso_netto", True)}
+    {riga("Liquidità netta di inizio anno", "liq_inizio")}
+    {riga("LIQUIDITA' NETTA DI FINE ANNO", "liq_fine", True)}
+
+    </table>
+    """
+
+    components.html(html, height=1300, scrolling=True)
