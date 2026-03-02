@@ -510,79 +510,83 @@ with tab3:
 
 
 
-# ================= TAB 4: INDICI DI VALUTAZIONE ================= #
+# ================= TAB 7: INDICI DI VALUTAZIONE ================= #
 with tab7:
     st.subheader("Indici di valutazione")
 
-    # --- Calcolo break-even (primo anno con ricavi >= costi totali) ---
-    #breakeven_year = None
-    #for i, row in df_summary.iterrows():
-     #   if row["Ricavi (€)"] >= row["Costi totali (€)"]:
-      #      breakeven_year = int(row["Anno"])
-       #     break
-            
-    #if breakeven_year:
-     #   st.metric("Break-even raggiunto nell'Anno", breakeven_year)
-    #else:
-     #   st.info("Break-even non raggiunto nei 5 anni considerati.")
-
-    # --- Grafico riepilogativo ---
-    fig_summary = px.line(
-        df_summary, 
-        x="Anno", 
-        y=["Ricavi (€)", "Costi totali (€)"], 
-        markers=True,
-        color_discrete_map={
-            "Ricavi (€)": "green",    
-            "Costi totali (€)": "red"
-        },
-        labels={
-            "Ricavi (€)": "Ricavi",
-            "Costi totali (€)": "Costi"
-        }
-    )
-
-    fig_summary.update_layout(
-        yaxis_title="€", 
-        yaxis_tickprefix="€", 
-        yaxis_tickformat=".0f", 
-        legend_title_text=""
-    )
-
-    # Forza asse Y da zero
-    fig_summary.update_yaxes(rangemode="tozero")
-
-    # Asse X solo numeri interi
-    fig_summary.update_xaxes(tickmode="linear", dtick=1)
-
-    st.plotly_chart(fig_summary, use_container_width=True)
-
-
-        # --- Ricalcolo riepilogo (assicura dati aggiornati da tutte le tabs) ---
+    # ================= RIEPILOGO DATI ================= #
     df_summary = pd.DataFrame({
         "Anno": years,
         "Ricavi (€)": df_ricavi["Totale ricavi (€)"],
         "Costi struttura (€)": df_costs["Totale Costi Struttura (€/anno)"],
         "Costi personale (€)": df_personale["Totale costi personale (€)"]
-      
     })
+
+    # Calcolo costi totali
     df_summary["Costi totali (€)"] = (
-        df_summary["Costi struttura (€)"] + df_summary["Costi personale (€)"]
-    )
-    df_summary["Risultato netto (€)"] = (
-        df_summary["Ricavi (€)"] - df_summary["Costi totali (€)"]
+        df_summary["Costi struttura (€)"] +
+        df_summary["Costi personale (€)"]
     )
 
+    # Calcolo risultato netto (EBIT)
+    df_summary["Risultato netto (€)"] = (
+        df_summary["Ricavi (€)"] -
+        df_summary["Costi totali (€)"]
+    )
+
+    # ================= BREAK EVEN ================= #
+    breakeven_year = None
+    for _, row in df_summary.iterrows():
+        if row["Ricavi (€)"] >= row["Costi totali (€)"]:
+            breakeven_year = int(row["Anno"])
+            break
+
+    if breakeven_year:
+        st.metric("Break-even raggiunto nell'anno", breakeven_year)
+    else:
+        st.info("Break-even non raggiunto nei 5 anni considerati.")
+
+    # ================= GRAFICO RICAVI VS COSTI ================= #
+    st.subheader("Andamento Ricavi vs Costi")
+
+    fig_summary = px.line(
+        df_summary,
+        x="Anno",
+        y=["Ricavi (€)", "Costi totali (€)"],
+        markers=True,
+        color_discrete_map={
+            "Ricavi (€)": "green",
+            "Costi totali (€)": "red"
+        },
+        labels={
+            "value": "€",
+            "variable": ""
+        }
+    )
+
+    fig_summary.update_layout(
+        yaxis_title="€",
+        yaxis_tickprefix="€",
+        yaxis_tickformat=",",
+        legend_title_text=""
+    )
+
+    fig_summary.update_yaxes(rangemode="tozero")
+    fig_summary.update_xaxes(tickmode="linear", dtick=1)
+
+    st.plotly_chart(fig_summary, use_container_width=True)
+
+    # ================= TABELLA DETTAGLIO ================= #
     st.subheader("Dettaglio costi e ricavi per anno")
     st.dataframe(df_summary, use_container_width=True)
-    
 
-    # --- Grafico del risultato netto ---
-    # Creiamo una colonna temporanea per il colore
-    df_summary["Segno"] = df_summary["Risultato netto (€)"].apply(lambda x: "Positivo" if x >= 0 else "Negativo")
+    # ================= GRAFICO EBIT ================= #
+    st.subheader("EBIT per anno (Ricavi - Costi)")
 
-    # --- Grafico del risultato netto ---
-    st.subheader("EBIT per anno (ricavi - costi)")
+    df_summary["Segno"] = df_summary["Risultato netto (€)"].apply(
+        lambda x: "Positivo" if x >= 0 else "Negativo"
+    )
+
     fig_risultato = px.bar(
         df_summary,
         x="Anno",
@@ -592,7 +596,7 @@ with tab7:
             "Positivo": "green",
             "Negativo": "red"
         },
-        text="Risultato netto (€)"  # opzionale: mostra i valori sulle barre
+        text="Risultato netto (€)"
     )
 
     fig_risultato.update_layout(
@@ -602,13 +606,11 @@ with tab7:
         showlegend=False
     )
 
-    # Forza asse Y da zero se vuoi vedere anche i negativi rispetto a zero
     fig_risultato.update_yaxes(rangemode="tozero")
 
     st.plotly_chart(fig_risultato, use_container_width=True)
 
-
-
+    
 
 
 
